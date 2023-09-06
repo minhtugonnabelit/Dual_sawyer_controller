@@ -1,0 +1,8 @@
+prefix=/home/anhminhtu/sawyer_ws/src/dual_sawyer_controller/build/devel
+
+Name: dual_sawyer_controller
+Description: Description of dual_sawyer_controller
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

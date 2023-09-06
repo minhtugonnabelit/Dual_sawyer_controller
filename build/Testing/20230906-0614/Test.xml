@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Site BuildName="(empty)"
+	BuildStamp="20230906-0614-Experimental"
+	Name="anhminhtu-ROG-Strix-G513IE-G513IE"
+	Generator="ctest-3.16.3"
+	CompilerName="/usr/bin/c++"
+	CompilerVersion="9.4.0"
+	OSName="Linux"
+	Hostname="anhminhtu-ROG-Strix-G513IE-G513IE"
+	OSRelease="5.15.0-82-generic"
+	OSVersion="#91~20.04.1-Ubuntu SMP Fri Aug 18 16:24:39 UTC 2023"
+	OSPlatform="x86_64"
+	Is64Bits="1"
+	VendorString="AuthenticAMD"
+	VendorID="Advanced Micro Devices"
+	FamilyID="23"
+	ModelID="96"
+	ProcessorCacheSize="512"
+	NumberOfLogicalCPU="16"
+	NumberOfPhysicalCPU="8"
+	TotalVirtualMemory="7812"
+	TotalPhysicalMemory="15401"
+	LogicalProcessorsPerPhysical="2"
+	ProcessorClockFrequency="2819.68"
+	>
+	<Testing>
+		<StartDateTime>Sep 06 16:52 AEST</StartDateTime>
+		<StartTestTime>1693983170</StartTestTime>
+		<TestList/>
+		<EndDateTime>Sep 06 16:52 AEST</EndDateTime>
+		<EndTestTime>1693983170</EndTestTime>
+		<ElapsedMinutes>0</ElapsedMinutes>
+	</Testing>
+</Site>
