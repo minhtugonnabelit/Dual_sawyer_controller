@@ -46,7 +46,7 @@ def start_sending():
         cond.notify_all()
 
 ## Laterncy update
-def latency_check(cb1, cb2):
+def latency_check(cb1 : Callback, cb2 :Callback):
     count = False
     done = False
     while not done:
@@ -65,19 +65,19 @@ def main():
 
     ## init client to the ip hosting rosbridge server
     clientA = roslibpy.Ros(host='192.168.0.3', port=9090)       # client with the enpoint to be followed
-    # clientB = roslibpy.Ros(host='192.168.0.5', port=8080)     # client with the endpoint to follow
+    clientB = roslibpy.Ros(host='192.168.0.5', port=8080)     # client with the endpoint to follow
 
     # ## open listenner to track mission state
     Call_A = Callback(client=clientA)
-    # Call_B = Callback(client=clientB)
+    Call_B = Callback(client=clientB)
     
     ## open talker with custom topic 
     talkerA = roslibpy.Topic(clientA,'/endpoint_state', 'intera_core_msgs/EndpointState')
-    # talkerB = roslibpy.Topic(clientB,'/endpoint_state', 'intera_core_msgs/EndpointState')
+    talkerB = roslibpy.Topic(clientB,'/endpoint_state', 'intera_core_msgs/EndpointState')
 
     ## start client communication
     clientA.run()
-    # clientB.run()
+    clientB.run()
 
     ## sample pose to go
     desired_pose = {'position':{'x': 0.7,
@@ -91,20 +91,22 @@ def main():
 
     # threaded transmit
     t1 = threading.Thread(target=transmit, args=(talkerA, msg5), name='robot_A')
-    # t2 = threading.Thread(target=transmit, args=(talkerB, msg5), name='robot_B')
+    t2 = threading.Thread(target=transmit, args=(talkerB, msg5), name='robot_B')
     openner = threading.Thread(target=start_sending)
     
     t1.start()
-    # t2.start()
-    openner.start()
-    
-    # latency = latency_check(Call_A, Call_B)
-    # print('Latency: ', latency)
+    t2.start()
 
+    global ready
+    with cond:
+        ready = input('Whenever you ready: ')
+        cond.notify_all()
 
-    openner.join()
+    latency = latency_check(Call_A, Call_B)
+    print('Latency: ', latency)
+
     t1.join()
-    # t2.join()
+    t2.join()
 
 if __name__ == '__main__':
     main()

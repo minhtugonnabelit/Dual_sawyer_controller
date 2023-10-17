@@ -11,14 +11,14 @@ class Callback:
 
         self._client = client
 
-        self._endpoint_subscriber = roslibpy.Topic(self._client,'/robot/limb/right/endpoint_state', 'intera_core_msgs/EndpointState', throttle_rate=50)
-        self._endpoint_subscriber.subscribe(self.endpoint_state)
+        self._endpoint_sub = roslibpy.Topic(self._client,'/robot/limb/right/endpoint_state', 'intera_core_msgs/EndpointState', throttle_rate=50)
+        self._endpoint_sub.subscribe(self.endpoint_state_callback)
 
         self.mission_subscriber = roslibpy.Topic(self._client,'/mission_state', 'std_msgs/Bool')
         self.mission_subscriber.subscribe(self.mission_state)
 
     ### ENdpoint state data getter
-    def endpoint_state(self, msg):
+    def endpoint_state_callback(self, msg):
         self._endpoint_ready = True
         self._endpoint = msg
 

@@ -19,7 +19,7 @@ from math import pi
 # EXTERNAL SIGNAL TRIGGER CLASS #
 #################################
 
-class external_signal():
+class Client_signal():
 
     def __init__(self):
 
@@ -96,7 +96,7 @@ class robot_control():
         rospy.loginfo('Robot homed!')
 
         self._tip_name = 'right_hand'
-        self._ext = external_signal()
+        self._ext = Client_signal()
         self._rate = rospy.Rate(5)
         self._pub_rate = rospy.Publisher('robot/joint_state_publish_rate',
                                          UInt16, queue_size=10)
@@ -137,10 +137,10 @@ class robot_control():
 
                 js = self._ext.get_js()
                 desired_js = deque(js.position)
-                # desired_js.pop()
-                # desired_js.popleft()
-                # print(self.joint_angles)
-                # print(js)
+                desired_js.pop()
+                desired_js.popleft()
+                print(self.joint_angles)
+                print(js)
 
                 if len(desired_js) != len(self.joint_angles):
                     rospy.logerr('The number of joint_angles must be %d', len(self.joint_angles))

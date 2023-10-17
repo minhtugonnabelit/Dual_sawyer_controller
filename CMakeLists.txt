@@ -7,9 +7,20 @@ project(dual_sawyer_controller)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-  intera_interface
+find_package(catkin 
+  REQUIRED 
+  COMPONENTS
   rospy
+  actionlib
+  sensor_msgs
+  control_msgs
+  trajectory_msgs
+  cv_bridge
+  dynamic_reconfigure
+  intera_core_msgs
+  intera_motion_msgs
+  intera_interface
+
 )
 
 ## System dependencies are found with CMake's conventions
@@ -103,10 +114,17 @@ catkin_python_setup()
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES dual_sawyer_controller
-#  CATKIN_DEPENDS intera_interface rospy
+  LIBRARIES dual_sawyer_controller
+  CATKIN_DEPENDS intera_interface rospy
 #  DEPENDS system_lib
 )
+
+catkin_install_python(PROGRAMS 
+  scripts/bridge_test.py
+  scripts/normal_controller.py
+  scripts/vel_joystick.py
+
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 ###########
 ## Build ##
