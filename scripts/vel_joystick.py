@@ -11,6 +11,9 @@ from intera_core_msgs.msg import JointCommand
 
 import roboticstoolbox as rtb
 import spatialmath as sm
+import modern_robotics as mr
+import sawyer_MR_description as s_des
+from sawyer import Sawyer
 
 POSITION_MODE = int(1)
 VELOCITY_MODE = int(2)
@@ -20,6 +23,8 @@ TRAJECTORY_MODE = int(4)
 VEL_SCALE = {'linear': 0.3, 'angular': 0.8}
 
 
+
+
 class VelCtrl:
 
     def __init__(self) -> None:
@@ -27,6 +32,7 @@ class VelCtrl:
         rospy.init_node("sawyer_vel_ctrl_w_joystick")
 
         # Initialise joystick subscriber
+        self.joy_msg = Joy()
         rospy.Subscriber("/joy", Joy, self.joy_callback)
 
         # Joint States Subscriber (obtain the current joint states for the vel_ctrl_sim_interface)
@@ -38,14 +44,17 @@ class VelCtrl:
             "/robot/limb/right/joint_command", JointCommand, queue_size=10
         )
 
+        
+
         # initilize vritual sawyer model to complete jacobian calculation
-        self._robot = rtb.models.DH.Sawyer()
+        self._robot = Sawyer()
 
         # Set initial joint states to 0, may need to change in IRL use
         self.cur_config = np.zeros(9)
 
         # Wait for actual joint_states to be stored by js_store() callback (NOTE: Don't change the 'is' to '==')
         while np.sum(self.cur_config) is 0:
+
             # If the current joint configurations of the robot are set to 0 put the thread to sleep (similar to a rate_limiter.sleep())
             rospy.sleep(0.1)
 
@@ -59,7 +68,7 @@ class VelCtrl:
         joint_command_msg.names = [
             "head_pan",
             "right_j0",
-            "right_j1",        # if self.right_grip == True:
+            "right_j1",       
             "right_j2",
             "right_j3",
             "right_j4",
@@ -78,62 +87,59 @@ class VelCtrl:
 
         return joint_command_msg
 
+
     def joy_callback(self, msg: Joy):
 
-        # callback joystick
-        cur_js = np.delete(self.cur_config, [0, -1])
+        self.joy_msg = msg
+        # return self.joy_msg
 
-        vz = 0
-        if msg.buttons[1]:
-            vz = 0.5
-        elif msg.buttons[2]:
-            vz = -0.5
+    def joy_to_vel(self):
 
-        # get linear and angular velocity
-        linear_vel = np.asarray(
-            [msg.axes[1], - msg.axes[0], vz]) * VEL_SCALE['linear']
-        angular_vel = np.asarray(
-            [msg.axes[3], msg.axes[4], 0]) * VEL_SCALE['angular']
+        while self.joy_msg is None:
+            rospy.sleep(0.1)
 
-        # combine velocities
-        ee_vel = np.hstack((linear_vel, angular_vel))
+        if len(self.cur_config) >= 7:
+            cur_js = np.delete(self.cur_config, [0, -1])
 
-        # calculate jacobian
-        j = self._robot.jacob0(cur_js)
+            vz = 0
+            if self.joy_msg.buttons[1]:
+                vz = 0.5
+            elif self.joy_msg.buttons[2]:
+                vz = -0.5
 
-        # calculate manipulability
-        w = np.sqrt(np.linalg.det(j @ np.transpose(j)))
+            # get linear and angular velocity
+            linear_vel = np.asarray(
+                [-self.joy_msg.axes[1], self.joy_msg.axes[0], vz]) * VEL_SCALE['linear']
+            angular_vel = np.asarray(
+                [self.joy_msg.axes[3], self.joy_msg.axes[4], 0]) * VEL_SCALE['angular']
 
-        # set threshold and damping
-        w_thresh = 0.04
-        max_damp = 0.5
+            # combine velocities
+            ee_vel = np.hstack((linear_vel, angular_vel))
 
-        # if manipulability is less than threshold, add damping
-        if w < w_thresh:
-            damp = (1-np.power(w/w_thresh, 2)) * max_damp 
-        else: 
-            damp = 0
+            # calculate jacobian
+            j = self._robot.jacob0(cur_js)
 
-        # calculate damped least square
-        j_dls = j @ np.transpose(j) @ np.linalg.inv( j @ np.transpose(j) + damp * np.eye(6) )
+            # get joint velocities
+            joint_vel = VelCtrl.solve_RMRC(j, ee_vel)
 
-        # get joint velocities, if robot is in singularity, use damped least square
-        joint_vel = np.linalg.pinv(j) @ j_dls @ np.transpose(ee_vel)
+            # Declare the joint's limit speed (NOTE: For safety purposes, set this to a value below or equal to 0.6 rad/s. Speed range spans from 0.0-1.0 rad/s)
+            limit_speed = 0.4
 
-        # Declare the joint's limit speed (NOTE: For safety purposes, set this to a value below or equal to 0.6 rad/s. Speed range spans from 0.0-1.0 rad/s)
-        limit_speed = 0.4
+            # Limit joint speed to 0.4 rad/sec (NOTE: Velocity limits are surprisingly high)
+            for i in range(len(joint_vel)):
+                if abs(joint_vel[i]) > limit_speed:
+                    joint_vel[i] = np.sign(joint_vel[i]) * limit_speed
+            rospy.loginfo("Joint vel: %s", joint_vel)
 
-        # Limit joint speed to 0.4 rad/sec (NOTE: Velocity limits are surprisingly high)
-        for i in range(len(joint_vel)):
-            if abs(joint_vel[i]) > limit_speed:
-                joint_vel[i] = np.sign(joint_vel[i]) * limit_speed
-        rospy.loginfo("Joint vel: %s", joint_vel)
+            joint_vel = np.insert(joint_vel, 0, 0)
+            joint_vel = np.insert(joint_vel, len(joint_vel), 0)
 
-        joint_vel = np.insert(joint_vel, 0, 0)
-        joint_vel = np.insert(joint_vel, len(joint_vel), 0)
+            self.joint_command.velocity = np.ndarray.tolist(joint_vel)
+            self.joint_command.header.stamp = rospy.Time.now()
 
-        self.joint_command.velocity = np.ndarray.tolist(joint_vel)
-        self.pub_joint_ctrl_msg()
+            if self.joy_msg.buttons[5]:
+                self.pub_joint_ctrl_msg()
+
 
     # Extract the current joint states of Sawyer
     def js_callback(self, js: JointState):
@@ -151,14 +157,46 @@ class VelCtrl:
         # Stores most recent joint states from the /robot/joint_states topic
         self.cur_config = js.position
 
+
     # Publishing velocity commands as a JointCommand message
     def pub_joint_ctrl_msg(self):
 
-        # Add a header time stamp
-        self.joint_command.header.stamp = rospy.Time.now()
-
         # Publish the joint velocities if the grip button is pressed
+        self.joint_command.header.stamp = rospy.Time.now()
         self.pub.publish(self.joint_command)
+
+
+    def solve_RMRC(jacob, ee_vel):
+
+        # calculate manipulability
+        w = np.sqrt(np.linalg.det(jacob @ np.transpose(jacob)))
+
+        # set threshold and damping
+        w_thresh = 0.04
+        max_damp = 0.5
+
+        # if manipulability is less than threshold, add damping
+        if w < w_thresh:
+            damp = (1-np.power(w/w_thresh, 2)) * max_damp 
+        else: 
+            damp = 0
+
+        # calculate damped least square
+        j_dls = np.transpose(jacob) @ np.linalg.inv( jacob @ np.transpose(jacob) + damp * np.eye(6) )
+
+        # get joint velocities, if robot is in singularity, use damped least square
+        joint_vel = j_dls @ np.transpose(ee_vel)
+
+        return joint_vel
+
+    def run_joystick_control(self):
+        # rospy.spin()
+        while not rospy.is_shutdown():
+            self.joy_to_vel()
+            rospy.sleep(0.1)
+            # self.pub_joint_ctrl_msg()
+            # rospy.loginfo("Joint vel: %s", self.joint_command.velocity)
+
 
 
 def main():
@@ -167,10 +205,12 @@ def main():
         out = VelCtrl()
 
         # Publish the joint velocities to get the robot running
-        out.pub_joint_ctrl_msg()
+        # out.pub_joint_ctrl_msg()
+        out.run_joystick_control()
+        
 
         rospy.spin()
-    except rospy.ROSInterruptException:
+    except rospy.ROSInterruptException as e:
         raise e
 
 

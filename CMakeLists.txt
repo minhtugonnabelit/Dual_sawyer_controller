@@ -20,7 +20,6 @@ find_package(catkin
   intera_core_msgs
   intera_motion_msgs
   intera_interface
-
 )
 
 ## System dependencies are found with CMake's conventions
@@ -123,6 +122,8 @@ catkin_install_python(PROGRAMS
   scripts/bridge_test.py
   scripts/normal_controller.py
   scripts/vel_joystick.py
+  scripts/simple_controller.py
+
 
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 

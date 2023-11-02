@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 ## Custom message maker
 def ep_message_maker(desired_pose):
     msg = roslibpy.Message({
-        'header':   roslibpy.Header(1024, roslibpy.Time(0.0,0.0), ''),  
+        'header':   roslibpy.Header(1024, roslibpy.Time.now(), ''),  
         'pose':     desired_pose,
         'twist':    {'linear': {'x': 0.0, 'y': 0.0, 'z': 0.0 },
                      'angular':{'x': 0.0, 'y': 0.0, 'z': 0.0 }},

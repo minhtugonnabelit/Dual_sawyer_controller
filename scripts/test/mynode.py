@@ -116,6 +116,6 @@ block = sawyer.fkine(sawyer.q)
 # print(block)
 
 lifting = sm.SE3(0,0,0.3).A @ block.A
-lift_q = sawyer.ikine_LM(lifting, q0=desired_q, joint_limits=True, mask=(0,0,0,1,1,1)).q
+lift_q = sawyer.ikine_LM(lifting, q0=desired_q, joint_limits=True,).q
 
 motion.go_to_joint_angles(lift_q)
