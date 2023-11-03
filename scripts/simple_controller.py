@@ -1,29 +1,21 @@
 
 import rospy
+from std_msgs.msg import UInt16
+from sensor_msgs.msg import JointState
+
 import intera_interface
 from intera_interface import Limb, CHECK_VERSION
+from intera_core_msgs.msg import JointCommand
 from intera_motion_interface import (
     MotionTrajectory,
     MotionWaypoint,
     MotionWaypointOptions
 )
 
-from collections import deque
-from std_msgs.msg import (Bool, UInt16, String)
-from sensor_msgs.msg import JointState
-from geometry_msgs.msg import PoseStamped
-from intera_core_msgs.msg import EndpointState, JointCommand
-from intera_motion_msgs.msg import TrajectoryOptions
-from math import pi
-
 import roboticstoolbox as rtb
 import spatialmath as sm
-import spatialmath.base as smb
 import numpy as np
-import copy
 
-
-from plate import Plate
 from sawyer import Sawyer
 
 POSITION_MODE = int(1)
