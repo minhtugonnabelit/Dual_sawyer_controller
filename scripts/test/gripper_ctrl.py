@@ -172,7 +172,7 @@ def main():
         rospy.sleep(1)
         grip_ctrl.initialise_vr(args.limb)
 
-    except rospy.ROSInterruptException:
+    except rospy.ROSInterruptException as e:
         raise e
 
 

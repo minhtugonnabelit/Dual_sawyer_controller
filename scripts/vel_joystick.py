@@ -21,16 +21,14 @@ VELOCITY_MODE = int(2)
 TORQUE_MODE = int(3)
 TRAJECTORY_MODE = int(4)
 
-VEL_SCALE = {'linear': 0.3, 'angular': 0.8}
-
-
-
+VEL_SCALE = {'linear': 0.2, 'angular': 0.8}
 
 class VelCtrl:
 
     def __init__(self) -> None:
 
         rospy.init_node("sawyer_vel_ctrl_w_joystick")
+        self.gripper = self.gripper_ctrl_init()
 
         # Initialise joystick subscriber
         self.joy_msg = None
@@ -128,7 +126,6 @@ class VelCtrl:
     def joy_callback(self, msg: Joy):
 
         self.joy_msg = msg
-        # return self.joy_msg
 
         while msg is None:
             rospy.INFO("Press RB to start")
@@ -171,10 +168,6 @@ class VelCtrl:
             joint_vel = np.insert(joint_vel, len(joint_vel), 0)
 
             self.joint_command.velocity = np.ndarray.tolist(joint_vel)
-            # self.joint_command.header.stamp = rospy.Time.now()
-
-            # if self.joy_msg.buttons[5]:
-                # self.pub_joint_ctrl_msg()
 
 
     # Extract the current joint states of Sawyer
@@ -204,6 +197,10 @@ class VelCtrl:
             print('please press RB to start!')
 
         if self.joy_msg.buttons[5]:
+            if self.joy_msg.buttons[7]: self.gripper.open()
+            elif self.joy_msg.buttons[6]: self.gripper.close()
+            elif self.joy_msg.buttons[8]: self.gripper.calibrate()
+
             self.pub.publish(self.joint_command)
 
 
@@ -231,12 +228,10 @@ class VelCtrl:
         return joint_vel
 
     def run_joystick_control(self):
-        # rospy.spin()
+
         while not rospy.is_shutdown():
             self.pub_joint_ctrl_msg()
             rospy.sleep(0.1)
-            # self.pub_joint_ctrl_msg()
-            # rospy.loginfo("Joint vel: %s", self.joint_command.velocity)
 
 
 
@@ -245,11 +240,9 @@ def main():
         # Initialise controller
         out = VelCtrl()
 
-        # Publish the joint velocities to get the robot running
-        # out.pub_joint_ctrl_msg()
+        # Start joystck control loop
         out.run_joystick_control()
         
-
         rospy.spin()
     except rospy.ROSInterruptException as e:
         raise e
