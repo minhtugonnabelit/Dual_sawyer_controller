@@ -7,6 +7,7 @@ from geometry_msgs.msg import TransformStamped
 from std_msgs.msg import Bool
 
 import intera_interface
+from intera_interface import CHECK_VERSION
 from intera_core_msgs.msg import JointCommand
 
 import roboticstoolbox as rtb
@@ -32,7 +33,7 @@ class VelCtrl:
         rospy.init_node("sawyer_vel_ctrl_w_joystick")
 
         # Initialise joystick subscriber
-        self.joy_msg = Joy()
+        self.joy_msg = None
         rospy.Subscriber("/joy", Joy, self.joy_callback)
 
         # Joint States Subscriber (obtain the current joint states for the vel_ctrl_sim_interface)
@@ -57,6 +58,42 @@ class VelCtrl:
 
             # If the current joint configurations of the robot are set to 0 put the thread to sleep (similar to a rate_limiter.sleep())
             rospy.sleep(0.1)
+
+
+    def gripper_ctrl_init(self):
+        """
+        """
+
+        # Initialise interfaces
+        rs = intera_interface.RobotEnable(CHECK_VERSION)
+        init_state = rs.state()
+        gripper = None
+        original_deadzone = None
+
+        rp = intera_interface.RobotParams()
+        valid_limbs = rp.get_limb_names()
+
+        # Cleaning function (executed on shutdown)
+        def clean_shutdown():
+            if gripper and original_deadzone:
+                gripper.set_dead_zone(original_deadzone)
+
+        try:
+            # Instantiate the gripper object
+            gripper = intera_interface.Gripper(
+                valid_limbs[0] + "_gripper")
+        except (ValueError, OSError) as e:
+            rospy.logerr(
+                "Could not detect an electric gripper attached to the robot.")
+            clean_shutdown()
+            return
+        rospy.on_shutdown(clean_shutdown)
+
+        # Possible deadzone values: 0.001 - 0.002
+        original_deadzone = gripper.get_dead_zone()
+        gripper.set_dead_zone(0.001)
+
+        return gripper
 
 
     def joint_command_init(self):
@@ -93,9 +130,8 @@ class VelCtrl:
         self.joy_msg = msg
         # return self.joy_msg
 
-    def joy_to_vel(self):
-
-        while self.joy_msg is None:
+        while msg is None:
+            rospy.INFO("Press RB to start")
             rospy.sleep(0.1)
 
         if len(self.cur_config) >= 7:
@@ -135,10 +171,10 @@ class VelCtrl:
             joint_vel = np.insert(joint_vel, len(joint_vel), 0)
 
             self.joint_command.velocity = np.ndarray.tolist(joint_vel)
-            self.joint_command.header.stamp = rospy.Time.now()
+            # self.joint_command.header.stamp = rospy.Time.now()
 
-            if self.joy_msg.buttons[5]:
-                self.pub_joint_ctrl_msg()
+            # if self.joy_msg.buttons[5]:
+                # self.pub_joint_ctrl_msg()
 
 
     # Extract the current joint states of Sawyer
@@ -163,7 +199,12 @@ class VelCtrl:
 
         # Publish the joint velocities if the grip button is pressed
         self.joint_command.header.stamp = rospy.Time.now()
-        self.pub.publish(self.joint_command)
+        while self.joy_msg is None:
+            rospy.sleep(0.1)
+            print('please press RB to start!')
+
+        if self.joy_msg.buttons[5]:
+            self.pub.publish(self.joint_command)
 
 
     def solve_RMRC(jacob, ee_vel):
@@ -192,7 +233,7 @@ class VelCtrl:
     def run_joystick_control(self):
         # rospy.spin()
         while not rospy.is_shutdown():
-            self.joy_to_vel()
+            self.pub_joint_ctrl_msg()
             rospy.sleep(0.1)
             # self.pub_joint_ctrl_msg()
             # rospy.loginfo("Joint vel: %s", self.joint_command.velocity)
