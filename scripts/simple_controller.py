@@ -1,27 +1,20 @@
 
 import rospy
+from std_msgs.msg import UInt16
+from sensor_msgs.msg import JointState
+
 import intera_interface
 from intera_interface import Limb, CHECK_VERSION
+from intera_core_msgs.msg import JointCommand
 from intera_motion_interface import (
     MotionTrajectory,
     MotionWaypoint,
     MotionWaypointOptions
 )
 
-from collections import deque
-from std_msgs.msg import (Bool, UInt16, String)
-from sensor_msgs.msg import JointState
-from geometry_msgs.msg import PoseStamped
-from intera_core_msgs.msg import EndpointState, JointCommand
-from intera_motion_msgs.msg import TrajectoryOptions
-from math import pi
-
 import roboticstoolbox as rtb
 import spatialmath as sm
-import spatialmath.base as smb
 import numpy as np
-import copy
-
 
 from plate import Plate
 from scripts.robot.sawyer import Sawyer
@@ -32,18 +25,22 @@ TORQUE_MODE = int(3)
 TRAJECTORY_MODE = int(4)
 
 VEL_SCALE = {'linear': 0.3, 'angular': 0.8}
-PICK_JS = [-1.507130859375, -0.065736328125, -0.6643173828125, 1.20662109375, -0.0244140625, -1.1122587890625, 0.883083984375]
-WAIT_JS = [-1.7902197265625, -0.2913447265625, -0.2379609375, 1.800587890625, -0.2802314453125, -1.6700625, 0.379505859375]
+PICK_JS = [-1.507130859375, -0.065736328125, -0.6643173828125,
+           1.20662109375, -0.0244140625, -1.1122587890625, 0.883083984375]
+WAIT_JS = [-1.7902197265625, -0.2913447265625, -0.2379609375,
+           1.800587890625, -0.2802314453125, -1.6700625, 0.379505859375]
 HANG_TO_BEND = [0.00, -0.82, 0.00, 2.02, 0.00, -1.22,  0]
+HANG_TO_RETURN = [-1.686873046875, -0.4110595703125, -0.2816884765625, 1.430654296875, -0.27078125, -1.1363759765625, 0.5559462890625]
 
 # HANG_TO_BEND_POSE = #sm.SE3(0.79, 0.16, 0.24) @ sm.SE3.Ry(np.pi/2)
-PICKER_GRIP_POSE = sm.SE3(0.1, 0, 0) @ sm.SE3.RPY(0, -90, -180, unit='deg', order='xyz')
-BENDER_GRIP_POSE = sm.SE3(-0.11, 0, 0) @ sm.SE3.RPY(-90,90, -90, unit='deg', order='xyz')
+PICKER_GRIP_POSE = sm.SE3(0.105, 0, 0) @ sm.SE3.RPY(0, -
+                                                  90, -180, unit='deg', order='xyz')
+BENDER_GRIP_POSE = sm.SE3(-0.11, 0, 0) @ sm.SE3.RPY(-90,
+                                                    90, -90, unit='deg', order='xyz')
 
 #################################
 # EXTERNAL SIGNAL TRIGGER CLASS #
 #################################
-
 
 class robot_control():
 
@@ -106,6 +103,7 @@ class robot_control():
             self._robot.q = np.array(cur_js)
             self.cur_ee_pose = self._robot.fkine(self._robot.q)
 
+
     def joint_command_init(self):
         """
         """
@@ -135,6 +133,7 @@ class robot_control():
         )
 
         return joint_command_msg
+
 
     def gripper_ctrl_init(self):
         """
@@ -170,6 +169,7 @@ class robot_control():
         gripper.set_dead_zone(0.001)
 
         return gripper
+    
 
     def joint_angles_control_init(self):
         """
@@ -177,8 +177,8 @@ class robot_control():
         try:
             self.traj = MotionTrajectory(limb=self._limb)
 
-            wpt_opts = MotionWaypointOptions(max_joint_speed_ratio=0.3,
-                                             max_joint_accel=0.05)
+            wpt_opts = MotionWaypointOptions(max_joint_speed_ratio=0.2,
+                                             max_joint_accel=0.04)
             self.waypoint = MotionWaypoint(
                 options=wpt_opts.to_msg(), limb=self._limb)
 
@@ -191,11 +191,13 @@ class robot_control():
             rospy.logerr(
                 'Keyboard interrupt detected from the user. Exiting before trajectory completion.')
 
+
     def home_robot(self):
         """
         """
         self.go_to_joint_angles(WAIT_JS)
         self._robot.q = np.array(WAIT_JS)
+
 
     def get_ee_pose(self):
         """
@@ -205,6 +207,7 @@ class robot_control():
 
         return self.cur_ee_pose
         # return self._robot.fkine(self._robot.q)
+
 
     def solve_RMRC(jacob, ee_vel):
         """
@@ -278,8 +281,7 @@ class robot_control():
 
         # if isinstance(path, list):
         while index < len(path):
-            # for pose in path:
-            print(len(self.cur_config))
+
             if len(self.cur_config) >= 7:
 
                 # get current joint state from subscribing limb jointstates, remove the first and last element (head_pan and torso_t0)
@@ -296,7 +298,6 @@ class robot_control():
                 for i in range(len(joint_vel)):
                     if abs(joint_vel[i]) > limit_speed:
                         joint_vel[i] = np.sign(joint_vel[i]) * limit_speed
-                # rospy.loginfo("Joint vel: %s", joint_vel)
 
                 self._robot.q = self._robot.q + joint_vel * 0.2
 
@@ -313,6 +314,37 @@ class robot_control():
 
             else:
                 continue
+
+        # # if isinstance(path, list):
+        # while index < len(path):
+
+        #     # get joint velocities
+        #     joint_vel = self.single_step_control(path[index], 0.2)
+
+        #     # Declare the joint's limit speed (NOTE: For safety purposes, set this to a value below or equal to 0.6 rad/s. Speed range spans from 0.0-1.0 rad/s)
+        #     limit_speed = 0.4
+
+        #     # Limit joint speed to 0.4 rad/sec (NOTE: Velocity limits are surprisingly high)
+        #     for i in range(len(joint_vel)):
+        #         if abs(joint_vel[i]) > limit_speed:
+        #             joint_vel[i] = np.sign(joint_vel[i]) * limit_speed
+        #     rospy.loginfo("Joint vel: %s", joint_vel)
+
+        #     # set virtual joint states
+        #     self._robot.q = self._robot.q + joint_vel * 0.2
+
+        #     # format the joint velocity to be published
+        #     joint_vel = np.insert(joint_vel, 0, 0)
+        #     joint_vel = np.insert(joint_vel, len(joint_vel), 0)
+        #     joint_command = self.joint_command_init()
+        #     joint_command.velocity = np.ndarray.tolist(joint_vel)
+        #     joint_command.header.stamp = rospy.Time.now()
+
+        #     # publish joint velocity
+        #     self.pub_joint_ctrl_msg(joint_command)
+        #     index += 1
+        #     self._rate.sleep()
+
 
     def go_to_joint_angles(self, desired_js):
 
@@ -338,11 +370,13 @@ class robot_control():
 
         self.traj.clear_waypoints()
 
+
     def pub_joint_ctrl_msg(self, msg:  JointCommand):
 
         # Publish the joint velocities if the grip button is pressed
         msg.header.stamp = rospy.Time.now()
         self.pub.publish(msg)
+
 
     def send_vel_command(self, joint_vel):
         # Declare the joint's limit speed (NOTE: For safety purposes, set this to a value below or equal to 0.6 rad/s. Speed range spans from 0.0-1.0 rad/s)
@@ -352,7 +386,6 @@ class robot_control():
         for i in range(len(joint_vel)):
             if abs(joint_vel[i]) > limit_speed:
                 joint_vel[i] = np.sign(joint_vel[i]) * limit_speed
-        # rospy.loginfo("Joint vel: %s", joint_vel)
 
         self._robot.q = self._robot.q + joint_vel * 0.2
 
@@ -366,28 +399,30 @@ class robot_control():
         self.pub_joint_ctrl_msg(joint_command)
         self._rate.sleep()
 
+
     def open_gripper(self):
         self.gripper.open()
+
 
     def close_gripper(self):
         self.gripper.close()
 
+    
+    def gen_path(current_pose, desired_pose, num_points=100):
 
-def gen_path(current_pose, desired_pose, num_points=100):
+        path = np.empty((num_points, 3))
+        s = rtb.trapezoidal(0, 1, num_points).s
+        for i in range(num_points):
+            path[i, :] = (1 - s[i])*current_pose.A[0:3, 3] + \
+                s[i]*desired_pose.A[0:3, 3]
 
-    path = np.empty((num_points, 3))
-    s = rtb.trapezoidal(0, 1, num_points).s
-    for i in range(num_points):
-        path[i, :] = (1 - s[i])*current_pose.A[0:3, 3] + \
-            s[i]*desired_pose.A[0:3, 3]
+        path_to_send = []
+        for pose in path:
+            p = sm.SE3(pose)
+            p.A[:3, :3] = current_pose.A[:3, :3]
+            path_to_send.append(p)
 
-    path_to_send = []
-    for pose in path:
-        p = sm.SE3(pose)
-        p.A[:3, :3] = current_pose.A[:3, :3]
-        path_to_send.append(p)
-
-    return path_to_send
+        return path_to_send
 
 
 def main():
@@ -417,21 +452,19 @@ def main():
     desired_pose = sm.SE3(0, 0.0, 0.1) @ current_pose
     path_to_send = rtb.ctraj(current_pose, desired_pose, 100)
     controller.follow_cart_path(path_to_send, speed=1)
-
-    rospy.sleep(1)
+    rospy.sleep(0.5)
 
     # MOVE BACKWARD
     current_pose = controller.get_ee_pose()
     desired_pose = sm.SE3(0, 0.2, 0.0) @ current_pose
-    print(desired_pose)
-    path_to_send = gen_path(current_pose, desired_pose)
+    path_to_send = robot_control.gen_path(current_pose, desired_pose)
     controller.follow_cart_path(path_to_send, speed=1)
 
     # # MOVE TO THE RIGHT
     current_pose = controller.get_ee_pose()
     desired_pose = sm.SE3(0.3, 0, 0) @ current_pose
     print(desired_pose)
-    path_to_send = gen_path(current_pose, desired_pose)
+    path_to_send = robot_control.gen_path(current_pose, desired_pose)
     controller.follow_cart_path(path_to_send, speed=1)
 
     # MOVE PLATE TO HANGED POSE
@@ -442,58 +475,31 @@ def main():
     desired_pose = current_pose @ sm.SE3.Rz(np.pi/4)
     path_to_send = rtb.ctraj(current_pose, desired_pose, 100)
     controller.follow_cart_path(path_to_send, speed=1)
+    rospy.sleep(0.5)
 
-    # # get the plate pose that related to base frame
-    # plate_pose = controller.get_ee_pose() @ PICKER_GRIP_POSE.inv()
-    # plate = Plate(plate_pose)
+    # UNTILE THE PLATE
+    controller.go_to_joint_angles(HANG_TO_BEND)
 
-    # # interpolate the bending motion
-    # step = 50
-    # all_seg = []
-    # s = rtb.trapezoidal(0, np.deg2rad(12), step).s
-    # for i in range(step):
+    # MOVE PLATE TO RETURN POSE
+    current_pose = controller.get_ee_pose()
+    desired_pose = sm.SE3(0,-0.2, 0) @ current_pose
+    path_to_send = rtb.ctraj(current_pose, desired_pose, 100)
+    controller.follow_cart_path(path_to_send, speed=1)
 
-    #     seg_array = []
-    #     _pick, _bend = plate.bend(s[i], seg_array)
+    # HANG TO RETURN
+    controller.go_to_joint_angles(HANG_TO_RETURN)
+    rospy.sleep(0.5)
 
-    #     # somehow this copy is real necessary, otherwise the pose will be updated
-    #     pick = copy.deepcopy(_pick)
-    #     bend = copy.deepcopy(_bend)
+    controller.go_to_joint_angles(PICK_JS)
+    rospy.sleep(0.5)
 
-    #     # assign relative orientation of the gripper in plate center frame to the extracted edges pose
-    #     pick_ori = pick.A[0:3,0:3] @ PICKER_GRIP_POSE.A[0:3,0:3]
-    #     pick.A[0:3,0:3] = pick_ori
+    # RELEASE THE PLATE
+    controller.open_gripper()
+    rospy.sleep(0.5)
 
-    #     # position of the grasping pose is kept
-    #     picker_grip_pose = pick
+    # RESET TO WAIT POSE
+    controller.go_to_joint_angles(WAIT_JS)
 
-    #     # send motion command
-    #     qdot = controller.single_step_control(picker_grip_pose, 0.02)
-    #     controller.send_vel_command(qdot)
-    #     all_seg.append(seg_array)
-
-    # # Reverse the bending motion
-    # step = len(all_seg)
-    # for i, seg_array in enumerate(reversed(all_seg)):
-
-    #     _pick, _bend = plate.unbend(seg_array)
-
-    #     # as noted above
-    #     pick = copy.deepcopy(_pick)
-    #     bend = copy.deepcopy(_bend)
-
-    #     # assign relative orientation of the gripper in plate center frame to the extracted edges pose
-    #     pick_ori = pick.A[0:3,0:3] @ PICKER_GRIP_POSE.A[0:3,0:3]
-    #     pick.A[0:3,0:3] = pick_ori
-
-    #     # position of the grasping pose is kept
-    #     picker_grip_pose = pick
-
-    #     # send motion command
-    #     controller.single_step_control(picker_grip_pose, 0.01)
-
-    # get pose for the plate
-    # and rotate to the plate
 
 
 if __name__ == "__main__":
