@@ -7,7 +7,7 @@ import intera_interface
 from intera_interface import CHECK_VERSION
 from intera_core_msgs.msg import JointCommand
 
-from sawyer import Sawyer
+from scripts.robot.sawyer import Sawyer
 
 POSITION_MODE = int(1)
 VELOCITY_MODE = int(2)
