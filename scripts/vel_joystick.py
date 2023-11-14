@@ -149,7 +149,7 @@ class VelCtrl:
             joint_vel = VelCtrl.solve_RMRC(j, ee_vel)
 
             # Declare the joint's limit speed (NOTE: For safety purposes, set this to a value below or equal to 0.6 rad/s. Speed range spans from 0.0-1.0 rad/s)
-            limit_speed = 0.4
+            limit_speed = 0.6
 
             # Limit joint speed to 0.4 rad/sec (NOTE: Velocity limits are surprisingly high)
             for i in range(len(joint_vel)):

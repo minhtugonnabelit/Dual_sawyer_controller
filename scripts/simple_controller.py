@@ -29,6 +29,7 @@ PICK_JS = [-1.507130859375, -0.065736328125, -0.6643173828125,
 WAIT_JS = [-1.7902197265625, -0.2913447265625, -0.2379609375,
            1.800587890625, -0.2802314453125, -1.6700625, 0.379505859375]
 HANG_TO_BEND = [0.00, -0.82, 0.00, 2.02, 0.00, -1.22,  0]
+HANG_TO_RETURN = [-1.686873046875, -0.4110595703125, -0.2816884765625, 1.430654296875, -0.27078125, -1.1363759765625, 0.5559462890625]
 
 # HANG_TO_BEND_POSE = #sm.SE3(0.79, 0.16, 0.24) @ sm.SE3.Ry(np.pi/2)
 PICKER_GRIP_POSE = sm.SE3(0.105, 0, 0) @ sm.SE3.RPY(0, -
@@ -174,8 +175,8 @@ class robot_control():
         try:
             self.traj = MotionTrajectory(limb=self._limb)
 
-            wpt_opts = MotionWaypointOptions(max_joint_speed_ratio=0.3,
-                                             max_joint_accel=0.05)
+            wpt_opts = MotionWaypointOptions(max_joint_speed_ratio=0.2,
+                                             max_joint_accel=0.04)
             self.waypoint = MotionWaypoint(
                 options=wpt_opts.to_msg(), limb=self._limb)
 
@@ -484,6 +485,11 @@ def main():
     desired_pose = sm.SE3(0,-0.2, 0) @ current_pose
     path_to_send = rtb.ctraj(current_pose, desired_pose, 100)
     controller.follow_cart_path(path_to_send, speed=1)
+
+    # HANG TO RETURN
+    controller.go_to_joint_angles(HANG_TO_RETURN)
+    rospy.sleep(0.5)
+
     controller.go_to_joint_angles(PICK_JS)
     rospy.sleep(0.5)
 
