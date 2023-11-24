@@ -7,16 +7,16 @@ import intera_interface
 from intera_interface import CHECK_VERSION
 from intera_core_msgs.msg import JointCommand
 
-from scripts.robot.sawyer import Sawyer
+from robot.sawyer import Sawyer
 
 POSITION_MODE = int(1)
 VELOCITY_MODE = int(2)
 TORQUE_MODE = int(3)
 TRAJECTORY_MODE = int(4)
 
-VEL_SCALE = {'linear': 0.2, 'angular': 0.8}
-
 class VelCtrl:
+
+    _VEL_SCALE = {'linear': 0.2, 'angular': 0.8}
 
     def __init__(self) -> None:
 
@@ -35,8 +35,6 @@ class VelCtrl:
         self.pub = rospy.Publisher(
             "/robot/limb/right/joint_command", JointCommand, queue_size=10
         )
-
-        
 
         # initilize vritual sawyer model to complete jacobian calculation
         self._robot = Sawyer()
@@ -135,9 +133,9 @@ class VelCtrl:
 
             # get linear and angular velocity
             linear_vel = np.asarray(
-                [-self.joy_msg.axes[1], self.joy_msg.axes[0], vz]) * VEL_SCALE['linear']
+                [-self.joy_msg.axes[1], self.joy_msg.axes[0], vz]) * self._VEL_SCALE['linear']
             angular_vel = np.asarray(
-                [self.joy_msg.axes[3], self.joy_msg.axes[4], 0]) * VEL_SCALE['angular']
+                [self.joy_msg.axes[3], 0, self.joy_msg.axes[4]]) * self._VEL_SCALE['angular']
 
             # combine velocities
             ee_vel = np.hstack((linear_vel, angular_vel))
@@ -185,9 +183,10 @@ class VelCtrl:
 
         # Publish the joint velocities if the grip button is pressed
         self.joint_command.header.stamp = rospy.Time.now()
-        while self.joy_msg is None:
+        while self.joy_msg is None and not rospy.is_shutdown():
             rospy.sleep(0.1)
             print('please press RB to start!')
+
 
         if self.joy_msg.buttons[5]:
             if self.joy_msg.buttons[7]: self.gripper.open()
@@ -196,7 +195,7 @@ class VelCtrl:
 
             self.pub.publish(self.joint_command)
 
-
+    @staticmethod
     def solve_RMRC(jacob, ee_vel):
 
         # calculate manipulability

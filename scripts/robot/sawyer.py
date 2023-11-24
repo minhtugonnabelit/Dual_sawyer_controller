@@ -1,16 +1,5 @@
-import os
-import copy
-import time
-
-import roboticstoolbox as rtb
-import matplotlib.pyplot as plt
-
 import numpy as np
-import spatialmath as sm
-import spatialmath.base as smb
-import spatialgeometry as geometry
-
-from swift import Swift
+import roboticstoolbox as rtb
 
 class Sawyer(rtb.DHRobot):
 
@@ -66,4 +55,3 @@ if __name__ == "__main__":
     robot = Sawyer()
     fig = robot.plot(robot.q, block=False)
     fig.hold()
-    # plt.show()

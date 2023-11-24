@@ -122,7 +122,7 @@ catkin_install_python(PROGRAMS
   scripts/bridge_test.py
   scripts/normal_controller.py
   scripts/vel_joystick.py
-  scripts/sawyer.py
+  scripts/robot/sawyer.py
   scripts/simple_controller.py
 
 

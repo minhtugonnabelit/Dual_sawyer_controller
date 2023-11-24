@@ -16,8 +16,7 @@ import roboticstoolbox as rtb
 import spatialmath as sm
 import numpy as np
 
-from plate import Plate
-from scripts.robot.sawyer import Sawyer
+from robot.sawyer import Sawyer
 
 POSITION_MODE = int(1)
 VELOCITY_MODE = int(2)
@@ -98,7 +97,7 @@ class robot_control():
         if len(self.cur_config) >= 7:
 
             # get current joint state from robot, remove the first and last element (head_pan and torso_t0)
-            cur_js = np.delete(self.cur_config, [0, 1, -1])
+            cur_js = np.delete(self.cur_config, [0, -1])
             print(cur_js)
             self._robot.q = np.array(cur_js)
             self.cur_ee_pose = self._robot.fkine(self._robot.q)
@@ -206,7 +205,6 @@ class robot_control():
             rospy.sleep(0.1)
 
         return self.cur_ee_pose
-        # return self._robot.fkine(self._robot.q)
 
 
     def solve_RMRC(jacob, ee_vel):
@@ -411,7 +409,8 @@ class robot_control():
     def gen_path(current_pose, desired_pose, num_points=100):
 
         path = np.empty((num_points, 3))
-        s = rtb.trapezoidal(0, 1, num_points).s
+        s = rtb.quintic(0, 1, num_points).s
+        # s = rtb.trapezoidal(0, 1, num_points).s
         for i in range(num_points):
             path[i, :] = (1 - s[i])*current_pose.A[0:3, 3] + \
                 s[i]*desired_pose.A[0:3, 3]
