@@ -5,8 +5,7 @@ from catkin_pkg.python_setup import generate_distutils_setup
 
 d = generate_distutils_setup(
     packages=['dual_sawyer_controller'],
-    # scripts=['scripts'],
-    package_dir={'': 'src'}
+    scripts=['scripts'],
 )
 
 setup(**d)

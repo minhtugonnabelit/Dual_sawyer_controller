@@ -123,7 +123,6 @@ catkin_install_python(PROGRAMS
   scripts/normal_controller.py
   scripts/vel_joystick.py
   scripts/simple_controller.py
-  src/dual_sawyer_controller/sawyer.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 ###########
