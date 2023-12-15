@@ -186,61 +186,62 @@ class robot_control():
         except rospy.ROSInterruptException:
             rospy.logerr('Keyboard interrupt detected from the user. Exiting before trajectory completion.') 
 
+    
     def go_to_Cartesian_pose(self):
 
         self.Done = False
         self._ext.set_mission_state(self.Done)
         # self.home_robot()
+        while not rospy.is_shutdown():
+            self._pub_rate.publish(5)
+            if self._ext.get_endpoint_flag():
 
-        self._pub_rate.publish(5)
-        if self._ext.get_endpoint_flag():
+                desired_endpoint = self._ext.get_endpoint_state()
+                desired_pose = desired_endpoint.pose
 
-            desired_endpoint = self._ext.get_endpoint_state()
-            desired_pose = desired_endpoint.pose
+                endpoint_state = self._limb.tip_state(self._tip_name)
+                if endpoint_state is None:
+                    rospy.logerr('Endpoint state not found with tip name %s', self._tip_name)
+                    return None
+                pose = endpoint_state.pose
 
-            endpoint_state = self._limb.tip_state(self._tip_name)
-            if endpoint_state is None:
-                rospy.logerr('Endpoint state not found with tip name %s', self._tip_name)
-                return None
-            pose = endpoint_state.pose
+                pose.position.x = desired_pose.position.x
+                pose.position.y = desired_pose.position.y
+                pose.position.z = desired_pose.position.z
 
-            pose.position.x = desired_pose.position.x
-            pose.position.y = desired_pose.position.y
-            pose.position.z = desired_pose.position.z
+                pose.orientation.x = desired_pose.orientation.x
+                pose.orientation.y = desired_pose.orientation.y
+                pose.orientation.z = desired_pose.orientation.z
+                pose.orientation.w = desired_pose.orientation.w
 
-            pose.orientation.x = desired_pose.orientation.x
-            pose.orientation.y = desired_pose.orientation.y
-            pose.orientation.z = desired_pose.orientation.z
-            pose.orientation.w = desired_pose.orientation.w
+                poseStamped = PoseStamped()
+                poseStamped.pose = pose
 
-            poseStamped = PoseStamped()
-            poseStamped.pose = pose
+                joint_angles = self._limb.joint_ordered_angles()
+                self.waypoint.set_cartesian_pose(poseStamped, self._tip_name, joint_angles)
 
-            joint_angles = self._limb.joint_ordered_angles()
-            self.waypoint.set_cartesian_pose(poseStamped, self._tip_name, joint_angles)
+                # rospy.loginfo('Sending waypoint: \n%s', self.waypoint.to_string())
 
-            # rospy.loginfo('Sending waypoint: \n%s', self.waypoint.to_string())
+                self.traj.append_waypoint(self.waypoint.to_msg())
 
-            self.traj.append_waypoint(self.waypoint.to_msg())
+                result = self.traj.send_trajectory()
+                if result is None:
+                    rospy.logerr('Trajectory FAILED to send')
+                    return
 
-            result = self.traj.send_trajectory()
-            if result is None:
-                rospy.logerr('Trajectory FAILED to send')
-                return
+                if result.result:
+                    rospy.loginfo('Motion controller successfully finished the trajectory!')
+                else:
+                    rospy.logerr('Motion controller failed to complete the trajectory with error %s',
+                                result.errorId)
+                
+                self.Done = result.result
+                self._ext.set_mission_state(self.Done)
+                
+                self.traj.clear_waypoints()
 
-            if result.result:
-                rospy.loginfo('Motion controller successfully finished the trajectory!')
             else:
-                rospy.logerr('Motion controller failed to complete the trajectory with error %s',
-                            result.errorId)
-            
-            self.Done = result.result
-            self._ext.set_mission_state(self.Done)
-            
-            self.traj.clear_waypoints()
-
-        else:
-            rospy.loginfo('Cartesian Pose not ready!')
+                rospy.loginfo('Cartesian Pose not ready!')
         
 
 
@@ -251,8 +252,8 @@ def main():
     robot = Limb()
     controller = robot_control(robot)
 
-    controller.joint_angles_control_init()
-    controller.go_to_joint_angles()
+    controller.cartersian_pose_init()
+    controller.go_to_Cartesian_pose()
 
 
 

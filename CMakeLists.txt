@@ -122,10 +122,8 @@ catkin_install_python(PROGRAMS
   scripts/bridge_test.py
   scripts/normal_controller.py
   scripts/vel_joystick.py
-  scripts/robot/sawyer.py
   scripts/simple_controller.py
-
-
+  src/dual_sawyer_controller/sawyer.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 ###########
@@ -213,6 +211,11 @@ endforeach()
 #   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
 #   FILES_MATCHING PATTERN "*.h"
 #   PATTERN ".svn" EXCLUDE
+# )
+
+# # Mark cpp header files for installation
+# install(DIRECTORY scripts/modules
+#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/scripts
 # )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)

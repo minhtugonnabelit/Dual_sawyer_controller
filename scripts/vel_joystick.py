@@ -7,20 +7,73 @@ import intera_interface
 from intera_interface import CHECK_VERSION
 from intera_core_msgs.msg import JointCommand
 
-from robot.sawyer import Sawyer
+# from dual_sawyer_controller import Sawyer
 
 POSITION_MODE = int(1)
 VELOCITY_MODE = int(2)
 TORQUE_MODE = int(3)
 TRAJECTORY_MODE = int(4)
 
+import roboticstoolbox as rtb
+
+class Sawyer(rtb.DHRobot):
+
+    def __init__(self) -> None:
+        super().__init__(
+            self._create_DH(),
+            name='Sawyer',
+            manufacturer='Rethink Robotics',
+            keywords=('dynamics', 'symbolic'),
+            )
+        
+        self.q = [0.0, -0.9, 0.0, 1.8, 0.0, -0.9, 0.0]
+
+    def _create_DH(self):
+        """
+        Create robot's standard DH model
+        """
+
+        # deg = np.pi / 180
+        mm = 1e-3
+        # kinematic parameters
+        a = np.r_[81, 0, 0, 0, 0, 0, 0] * mm
+        d = np.r_[317, 192.5, 400, -168.5, 400, 136.3, 133.75] * mm
+        alpha = [-np.pi / 2, 
+                 np.pi / 2, 
+                 -np.pi / 2, 
+                 np.pi / 2, 
+                 -np.pi / 2, 
+                 np.pi / 2, 
+                 0]
+        qlim = np.deg2rad([[-175, 175],
+                           [-219, 131],
+                           [-175, 175],
+                           [-175, 175],
+                           [-170.5, 170.5],
+                           [-170.5, 170.5],
+                           [-270, 270]])
+
+        # offset to have the dh from toolbox match with the actual pose
+        offset = [0, np.pi/2, 0, 0, 0, 0, -np.pi/2]
+
+        links = []
+
+        for j in range(7):
+            link = rtb.RevoluteDH(
+                d=d[j], a=a[j], alpha=alpha[j], offset=offset[j], qlim=qlim[j])
+            links.append(link)
+
+        return links
+
+
 class VelCtrl:
 
-    _VEL_SCALE = {'linear': 0.2, 'angular': 0.8}
+    _VEL_SCALE = {'linear': 0.2, 'angular': 0.3}
 
     def __init__(self) -> None:
 
         rospy.init_node("sawyer_vel_ctrl_w_joystick")
+        
         self.gripper = self.gripper_ctrl_init()
 
         # Initialise joystick subscriber
@@ -31,10 +84,13 @@ class VelCtrl:
         rospy.Subscriber("/robot/joint_states", JointState, self.js_callback)
 
         # Velocity Control Message Publisher
-        self.joint_command = self.joint_command_init()
-        self.pub = rospy.Publisher(
+        self.joint_command = VelCtrl.joint_command_to_msg()
+        self._joint_comm_pub = rospy.Publisher(
             "/robot/limb/right/joint_command", JointCommand, queue_size=10
         )
+
+        # Initialise the robot head object
+        self._head = intera_interface.Head()
 
         # initilize vritual sawyer model to complete jacobian calculation
         self._robot = Sawyer()
@@ -84,13 +140,14 @@ class VelCtrl:
 
         return gripper
 
-
-    def joint_command_init(self):
+    @staticmethod
+    def joint_command_to_msg():
 
         # Joint Command Message Initialisation
         joint_command_msg = JointCommand()
 
         # To check the order of the joints run a 'rostopic echo /robot/joint_states', and assign the order displayed to the JointCommand().names argument
+        # This sequence is important as it is used to map the joint velocities to the correct joints, currently matched with actual Sawyer model instead of Gazebo version.
         joint_command_msg.names = [
             "head_pan",
             "right_j0",
@@ -122,8 +179,11 @@ class VelCtrl:
             rospy.INFO("Press RB to start")
             rospy.sleep(0.1)
 
+
         if len(self.cur_config) >= 7:
+
             cur_js = np.delete(self.cur_config, [0, -1])
+            
 
             vz = 0
             if self.joy_msg.buttons[1]:
@@ -133,7 +193,7 @@ class VelCtrl:
 
             # get linear and angular velocity
             linear_vel = np.asarray(
-                [-self.joy_msg.axes[1], self.joy_msg.axes[0], vz]) * self._VEL_SCALE['linear']
+                [self.joy_msg.axes[0], -self.joy_msg.axes[1], vz]) * self._VEL_SCALE['linear']
             angular_vel = np.asarray(
                 [self.joy_msg.axes[3], 0, self.joy_msg.axes[4]]) * self._VEL_SCALE['angular']
 
@@ -149,11 +209,11 @@ class VelCtrl:
             # Declare the joint's limit speed (NOTE: For safety purposes, set this to a value below or equal to 0.6 rad/s. Speed range spans from 0.0-1.0 rad/s)
             limit_speed = 0.6
 
-            # Limit joint speed to 0.4 rad/sec (NOTE: Velocity limits are surprisingly high)
+            # Limit joint speed to 0.6 rad/sec (NOTE: Velocity limits are surprisingly high)
             for i in range(len(joint_vel)):
                 if abs(joint_vel[i]) > limit_speed:
                     joint_vel[i] = np.sign(joint_vel[i]) * limit_speed
-            rospy.loginfo("Joint vel: %s", joint_vel)
+            # rospy.loginfo("Joint vel: %s", joint_vel)
 
             joint_vel = np.insert(joint_vel, 0, 0)
             joint_vel = np.insert(joint_vel, len(joint_vel), 0)
@@ -178,6 +238,8 @@ class VelCtrl:
         self.cur_config = js.position
 
 
+
+
     # Publishing velocity commands as a JointCommand message
     def pub_joint_ctrl_msg(self):
 
@@ -187,13 +249,15 @@ class VelCtrl:
             rospy.sleep(0.1)
             print('please press RB to start!')
 
-
+        # Toggle Right Bumpper to trigger command sending
         if self.joy_msg.buttons[5]:
+
+            # Button mapping for gripper control
             if self.joy_msg.buttons[7]: self.gripper.open()
             elif self.joy_msg.buttons[6]: self.gripper.close()
             elif self.joy_msg.buttons[8]: self.gripper.calibrate()
 
-            self.pub.publish(self.joint_command)
+            self._joint_comm_pub.publish(self.joint_command)
 
     @staticmethod
     def solve_RMRC(jacob, ee_vel):
@@ -216,7 +280,6 @@ class VelCtrl:
 
         # get joint velocities, if robot is in singularity, use damped least square
         joint_vel = j_dls @ np.transpose(ee_vel)
-
         return joint_vel
 
     def run_joystick_control(self):

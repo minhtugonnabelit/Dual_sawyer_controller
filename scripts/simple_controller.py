@@ -16,7 +16,7 @@ import roboticstoolbox as rtb
 import spatialmath as sm
 import numpy as np
 
-from robot.sawyer import Sawyer
+from dual_sawyer_controller import Sawyer
 
 POSITION_MODE = int(1)
 VELOCITY_MODE = int(2)
@@ -41,7 +41,7 @@ BENDER_GRIP_POSE = sm.SE3(-0.11, 0, 0) @ sm.SE3.RPY(-90,
 # EXTERNAL SIGNAL TRIGGER CLASS #
 #################################
 
-class robot_control():
+class VelControl():
 
     def __init__(self, limb):
 
@@ -57,6 +57,7 @@ class robot_control():
 
         # Joint States Subscriber (obtain the current joint states for the vel_ctrl_sim_interface)
         self.cur_ee_pose = None
+        self.cur_config = rospy.wait_for_message("/robot/joint_states", JointState).position
         rospy.Subscriber("/robot/joint_states", JointState, self.js_callback)
 
         # Velocity Control Message Publisher
@@ -70,13 +71,15 @@ class robot_control():
         self.joint_angles_control_init()
 
         # Set initial joint states to 0, may need to change in IRL use
-        self.cur_config = np.zeros(9)
+        # self.cur_config = rospy.wait_for_message("/robot/joint_states", JointState).position
 
-        # Wait for actual joint_states to be stored by js_store() callback (NOTE: Don't change the 'is' to '==')
-        while np.sum(self.cur_config) is 0:
+        # # Wait for actual joint_states to be stored by js_store() callback (NOTE: Don't change the 'is' to '==')
+        # while np.sum(self.cur_config) is 0:
 
-            # If the current joint configurations of the robot are set to 0 put the thread to sleep (similar to a rate_limiter.sleep())
-            rospy.sleep(0.1)
+        #     # If the current joint configurations of the robot are set to 0 put the thread to sleep (similar to a rate_limiter.sleep())
+        #     rospy.sleep(0.1)
+
+        # rospy.wait_for_message("/robot/joint_states", JointState)
 
     # Extract the current joint states of Sawyer
 
@@ -102,8 +105,8 @@ class robot_control():
             self._robot.q = np.array(cur_js)
             self.cur_ee_pose = self._robot.fkine(self._robot.q)
 
-
-    def joint_command_init(self):
+    @staticmethod
+    def joint_command_to_msg():
         """
         """
 
@@ -267,8 +270,7 @@ class robot_control():
         # calculate joint velocities, singularity check is already included in the function
 
         j = self._robot.jacob0(self._robot.q)
-        mu_threshold = 0.04 if self._robot._name == "Sawyer" else 0.01
-        joint_vel = robot_control.solve_RMRC(j, ee_vel)
+        joint_vel = VelControl.solve_RMRC(j, ee_vel)
 
         return joint_vel
 
@@ -303,7 +305,7 @@ class robot_control():
                 joint_vel = np.insert(joint_vel, 0, 0)
                 joint_vel = np.insert(joint_vel, len(joint_vel), 0)
 
-                joint_command = self.joint_command_init()
+                joint_command = VelControl.joint_command_to_msg()
                 joint_command.velocity = np.ndarray.tolist(joint_vel)
                 joint_command.header.stamp = rospy.Time.now()
                 self.pub_joint_ctrl_msg(joint_command)
@@ -312,36 +314,6 @@ class robot_control():
 
             else:
                 continue
-
-        # # if isinstance(path, list):
-        # while index < len(path):
-
-        #     # get joint velocities
-        #     joint_vel = self.single_step_control(path[index], 0.2)
-
-        #     # Declare the joint's limit speed (NOTE: For safety purposes, set this to a value below or equal to 0.6 rad/s. Speed range spans from 0.0-1.0 rad/s)
-        #     limit_speed = 0.4
-
-        #     # Limit joint speed to 0.4 rad/sec (NOTE: Velocity limits are surprisingly high)
-        #     for i in range(len(joint_vel)):
-        #         if abs(joint_vel[i]) > limit_speed:
-        #             joint_vel[i] = np.sign(joint_vel[i]) * limit_speed
-        #     rospy.loginfo("Joint vel: %s", joint_vel)
-
-        #     # set virtual joint states
-        #     self._robot.q = self._robot.q + joint_vel * 0.2
-
-        #     # format the joint velocity to be published
-        #     joint_vel = np.insert(joint_vel, 0, 0)
-        #     joint_vel = np.insert(joint_vel, len(joint_vel), 0)
-        #     joint_command = self.joint_command_init()
-        #     joint_command.velocity = np.ndarray.tolist(joint_vel)
-        #     joint_command.header.stamp = rospy.Time.now()
-
-        #     # publish joint velocity
-        #     self.pub_joint_ctrl_msg(joint_command)
-        #     index += 1
-        #     self._rate.sleep()
 
 
     def go_to_joint_angles(self, desired_js):
@@ -391,7 +363,7 @@ class robot_control():
         joint_vel = np.insert(joint_vel, 0, 0)
         joint_vel = np.insert(joint_vel, len(joint_vel), 0)
 
-        joint_command = self.joint_command_init()
+        joint_command = VelControl.joint_command_to_msg()
         joint_command.velocity = np.ndarray.tolist(joint_vel)
         joint_command.header.stamp = rospy.Time.now()
         self.pub_joint_ctrl_msg(joint_command)
@@ -430,7 +402,7 @@ def main():
 
     # initialize robot and controller
     robot = Limb()
-    controller = robot_control(robot)
+    controller = VelControl(robot)
 
     # HOME POSITION
     controller.go_to_joint_angles(WAIT_JS)
@@ -456,14 +428,13 @@ def main():
     # MOVE BACKWARD
     current_pose = controller.get_ee_pose()
     desired_pose = sm.SE3(0, 0.2, 0.0) @ current_pose
-    path_to_send = robot_control.gen_path(current_pose, desired_pose)
+    path_to_send = VelControl.gen_path(current_pose, desired_pose)
     controller.follow_cart_path(path_to_send, speed=1)
 
     # # MOVE TO THE RIGHT
     current_pose = controller.get_ee_pose()
     desired_pose = sm.SE3(0.3, 0, 0) @ current_pose
-    print(desired_pose)
-    path_to_send = robot_control.gen_path(current_pose, desired_pose)
+    path_to_send = VelControl.gen_path(current_pose, desired_pose)
     controller.follow_cart_path(path_to_send, speed=1)
 
     # MOVE PLATE TO HANGED POSE
