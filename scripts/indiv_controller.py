@@ -19,6 +19,10 @@ import time
 
 class IndivController:
 
+    """
+    This class is used to control each robot arm individually.
+    """
+
     def __init__(self) -> None:
         pass
 
@@ -27,14 +31,18 @@ class IndivController:
 
     def run(self):
 
+        while not rospy.is_shutdown():
+            pass
+
         rospy.on_shutdown(self.shutdown)        
-        pass
 
     def shutdown(self):
+
+        rospy.loginfo("Stopping the controller ...")
         pass
     
-    def servo_picker(self):
+    def picker_servoing(self):
         pass
 
-    def servo_clamper(self):
+    def clamper_servoing(self):
         pass
