@@ -119,10 +119,10 @@ catkin_package(
 )
 
 catkin_install_python(PROGRAMS 
-  scripts/bridge_test.py
-  scripts/normal_controller.py
-  scripts/vel_joystick.py
-  scripts/simple_controller.py
+  scripts/test/bridge_test.py
+  scripts/test/normal_controller.py
+  scripts/test/vel_joystick.py
+  scripts/test/simple_controller.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 ###########

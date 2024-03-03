@@ -3,9 +3,11 @@ import numpy as np
 import rospy
 from sensor_msgs.msg import JointState, Joy
 
+import roboticstoolbox as rtb
 import intera_interface
 from intera_interface import CHECK_VERSION
 from intera_core_msgs.msg import JointCommand
+
 
 # from dual_sawyer_controller import Sawyer
 
@@ -14,7 +16,6 @@ VELOCITY_MODE = int(2)
 TORQUE_MODE = int(3)
 TRAJECTORY_MODE = int(4)
 
-import roboticstoolbox as rtb
 
 class Sawyer(rtb.DHRobot):
 
@@ -76,6 +77,9 @@ class VelCtrl:
         
         self.gripper = self.gripper_ctrl_init()
 
+        # initilize vritual sawyer model to complete jacobian calculation
+        self._robot = Sawyer()
+
         # Initialise joystick subscriber
         self.joy_msg = None
         rospy.Subscriber("/joy", Joy, self.joy_callback)
@@ -84,7 +88,7 @@ class VelCtrl:
         rospy.Subscriber("/robot/joint_states", JointState, self.js_callback)
 
         # Velocity Control Message Publisher
-        self.joint_command = VelCtrl.joint_command_to_msg()
+        self.joint_command = VelCtrl.joint_command_init()
         self._joint_comm_pub = rospy.Publisher(
             "/robot/limb/right/joint_command", JointCommand, queue_size=10
         )
@@ -92,8 +96,7 @@ class VelCtrl:
         # Initialise the robot head object
         self._head = intera_interface.Head()
 
-        # initilize vritual sawyer model to complete jacobian calculation
-        self._robot = Sawyer()
+
 
         # Set initial joint states to 0, may need to change in IRL use
         self.cur_config = np.zeros(9)
@@ -103,7 +106,6 @@ class VelCtrl:
 
             # If the current joint configurations of the robot are set to 0 put the thread to sleep (similar to a rate_limiter.sleep())
             rospy.sleep(0.1)
-
 
     def gripper_ctrl_init(self):
         """
@@ -139,37 +141,6 @@ class VelCtrl:
         gripper.set_dead_zone(0.001)
 
         return gripper
-
-    @staticmethod
-    def joint_command_to_msg():
-
-        # Joint Command Message Initialisation
-        joint_command_msg = JointCommand()
-
-        # To check the order of the joints run a 'rostopic echo /robot/joint_states', and assign the order displayed to the JointCommand().names argument
-        # This sequence is important as it is used to map the joint velocities to the correct joints, currently matched with actual Sawyer model instead of Gazebo version.
-        joint_command_msg.names = [
-            "head_pan",
-            "right_j0",
-            "right_j1",       
-            "right_j2",
-            "right_j3",
-            "right_j4",
-            "right_j5",
-            "right_j6",
-            "torso_t0",
-        ]
-
-        # Set the control mode to the VELOCITY
-        joint_command_msg.mode = VELOCITY_MODE
-
-        # Set the initial velocity at all joints to 0.0
-        joint_command_msg.velocity = np.ndarray.tolist(
-            np.zeros(len(joint_command_msg.names))
-        )
-
-        return joint_command_msg
-
 
     def joy_callback(self, msg: Joy):
 
@@ -213,32 +184,17 @@ class VelCtrl:
             for i in range(len(joint_vel)):
                 if abs(joint_vel[i]) > limit_speed:
                     joint_vel[i] = np.sign(joint_vel[i]) * limit_speed
-            # rospy.loginfo("Joint vel: %s", joint_vel)
 
             joint_vel = np.insert(joint_vel, 0, 0)
             joint_vel = np.insert(joint_vel, len(joint_vel), 0)
 
             self.joint_command.velocity = np.ndarray.tolist(joint_vel)
 
-
     # Extract the current joint states of Sawyer
     def js_callback(self, js: JointState):
-        """
-        JointState message definition:
-        std_msgs/Header header
-            uint32 seq
-            time stamp
-            string frame_id
-        string[] name
-        float64[] position
-        float64[] velocity
-        float64[] effort
-        """
+
         # Stores most recent joint states from the /robot/joint_states topic
         self.cur_config = js.position
-
-
-
 
     # Publishing velocity commands as a JointCommand message
     def pub_joint_ctrl_msg(self):
@@ -258,6 +214,13 @@ class VelCtrl:
             elif self.joy_msg.buttons[8]: self.gripper.calibrate()
 
             self._joint_comm_pub.publish(self.joint_command)
+
+    def run_joystick_control(self):
+
+        while not rospy.is_shutdown():
+            self.pub_joint_ctrl_msg()
+            rospy.sleep(0.1)
+
 
     @staticmethod
     def solve_RMRC(jacob, ee_vel):
@@ -282,15 +245,39 @@ class VelCtrl:
         joint_vel = j_dls @ np.transpose(ee_vel)
         return joint_vel
 
-    def run_joystick_control(self):
+    @staticmethod
+    def joint_command_init():
 
-        while not rospy.is_shutdown():
-            self.pub_joint_ctrl_msg()
-            rospy.sleep(0.1)
+        # Joint Command Message Initialisation
+        joint_command_msg = JointCommand()
 
+        # To check the order of the joints run a 'rostopic echo /robot/joint_states', and assign the order displayed to the JointCommand().names argument
+        # This sequence is important as it is used to map the joint velocities to the correct joints, currently matched with actual Sawyer model instead of Gazebo version.
+        joint_command_msg.names = [
+            "head_pan",
+            "right_j0",
+            "right_j1",       
+            "right_j2",
+            "right_j3",
+            "right_j4",
+            "right_j5",
+            "right_j6",
+            "torso_t0",
+        ]
+
+        # Set the control mode to the VELOCITY
+        joint_command_msg.mode = VELOCITY_MODE
+
+        # Set the initial velocity at all joints to 0.0
+        joint_command_msg.velocity = np.ndarray.tolist(
+            np.zeros(len(joint_command_msg.names))
+        )
+
+        return joint_command_msg
 
 
 def main():
+
     try:
         # Initialise controller
         out = VelCtrl()
@@ -299,6 +286,7 @@ def main():
         out.run_joystick_control()
         
         rospy.spin()
+
     except rospy.ROSInterruptException as e:
         raise e
 
