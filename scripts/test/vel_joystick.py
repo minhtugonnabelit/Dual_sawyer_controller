@@ -1,8 +1,6 @@
-
 import rospy
 from sensor_msgs.msg import JointState, Joy
 
-import roboticstoolbox as rtb
 import intera_interface
 from intera_interface import CHECK_VERSION
 from intera_core_msgs.msg import JointCommand
@@ -40,20 +38,20 @@ class VelCtrl:
 
         rospy.init_node("sawyer_vel_ctrl_w_joystick")
         
-        self.gripper = self.gripper_ctrl_init()
+        self._gripper = self.gripper_ctrl_init()
 
         # initilize vritual sawyer model to complete jacobian calculation
         self._robot = Sawyer()
 
         # Initialise joystick subscriber
-        self.joy_msg = None
+        self._joy_msg = None
         rospy.Subscriber("/joy", Joy, self.joy_callback)
 
         # Joint States Subscriber (obtain the current joint states for the vel_ctrl_sim_interface)
-        rospy.Subscriber("/robot/joint_states", JointState, self.js_callback)
+        rospy.Subscriber("/robot/joint_states", JointState, self.jointstates_callback)
 
         # Velocity Control Message Publisher
-        self.joint_command = VelCtrl.joint_command_init()
+        self._joint_command = VelCtrl.joint_command_init()
         self._joint_comm_pub = rospy.Publisher(
             "/robot/limb/right/joint_command", JointCommand, queue_size=10
         )
@@ -61,13 +59,11 @@ class VelCtrl:
         # Initialise the robot head object
         self._head = intera_interface.Head()
 
-
-
         # Set initial joint states to 0, may need to change in IRL use
-        self.cur_config = np.zeros(9)
+        self._cur_config = np.zeros(9)
 
         # Wait for actual joint_states to be stored by js_store() callback (NOTE: Don't change the 'is' to '==')
-        while np.sum(self.cur_config) is 0:
+        while np.sum(self._cur_config) is 0:
 
             # If the current joint configurations of the robot are set to 0 put the thread to sleep (similar to a rate_limiter.sleep())
             rospy.sleep(0.1)
@@ -75,29 +71,29 @@ class VelCtrl:
     # Callback functions
     def joy_callback(self, msg: Joy):
 
-        self.joy_msg = msg
+        self._joy_msg = msg
 
         while msg is None:
             rospy.INFO("Press RB to start")
             rospy.sleep(0.1)
 
 
-        if len(self.cur_config) >= 7:
+        if len(self._cur_config) >= 7:
 
-            cur_js = np.delete(self.cur_config, [0, -1])
+            cur_js = np.delete(self._cur_config, [0, -1])
             
 
             vz = 0
-            if self.joy_msg.buttons[1]:
+            if self._joy_msg.buttons[1]:
                 vz = 0.5
-            elif self.joy_msg.buttons[2]:
+            elif self._joy_msg.buttons[2]:
                 vz = -0.5
 
             # get linear and angular velocity
             linear_vel = np.asarray(
-                [self.joy_msg.axes[0], -self.joy_msg.axes[1], vz]) * self._VEL_SCALE['linear']
+                [self._joy_msg.axes[0], -self._joy_msg.axes[1], vz]) * self._VEL_SCALE['linear']
             angular_vel = np.asarray(
-                [self.joy_msg.axes[3], 0, self.joy_msg.axes[4]]) * self._VEL_SCALE['angular']
+                [self._joy_msg.axes[3], 0, self._joy_msg.axes[4]]) * self._VEL_SCALE['angular']
 
             # combine velocities
             ee_vel = np.hstack((linear_vel, angular_vel))
@@ -119,31 +115,31 @@ class VelCtrl:
             joint_vel = np.insert(joint_vel, 0, 0)
             joint_vel = np.insert(joint_vel, len(joint_vel), 0)
 
-            self.joint_command.velocity = np.ndarray.tolist(joint_vel)
+            self._joint_command.velocity = np.ndarray.tolist(joint_vel)
 
-    def js_callback(self, js: JointState):
+    def jointstates_callback(self, js: JointState):
 
         # Stores most recent joint states from the /robot/joint_states topic
-        self.cur_config = js.position
+        self._cur_config = js.position
 
     # Publishing velocity commands as a JointCommand message
     def pub_joint_ctrl_msg(self):
 
         # Publish the joint velocities if the grip button is pressed
-        self.joint_command.header.stamp = rospy.Time.now()
-        while self.joy_msg is None and not rospy.is_shutdown():
+        self._joint_command.header.stamp = rospy.Time.now()
+        while self._joy_msg is None and not rospy.is_shutdown():
             rospy.sleep(0.1)
             print('please press RB to start!')
 
         # Toggle Right Bumpper to trigger command sending
-        if self.joy_msg.buttons[5]:
+        if self._joy_msg.buttons[5]:
 
             # Button mapping for gripper control
-            if self.joy_msg.buttons[7]: self.gripper.open()
-            elif self.joy_msg.buttons[6]: self.gripper.close()
-            elif self.joy_msg.buttons[8]: self.gripper.calibrate()
+            if self._joy_msg.buttons[7]: self._gripper.open()
+            elif self._joy_msg.buttons[6]: self._gripper.close()
+            elif self._joy_msg.buttons[8]: self._gripper.calibrate()
 
-            self._joint_comm_pub.publish(self.joint_command)
+            self._joint_comm_pub.publish(self._joint_command)
 
     def run_joystick_control(self):
 
@@ -200,7 +196,7 @@ class VelCtrl:
 
             try:
                 # Instantiate the gripper object
-                gripper = intera_interface.Gripper(
+                gripper = intera_interface._gripper(
                     valid_limbs[0] + "_gripper")
             except (ValueError, OSError) as e:
                 rospy.logerr(
